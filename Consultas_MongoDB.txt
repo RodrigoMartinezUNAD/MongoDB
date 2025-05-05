@@ -1,0 +1,114 @@
+Consultas para realizar en el MongoDB
+
+#Consultas mediante interfaz de MongoDB
+
+#Consulta para obtener las alertas de severidad disaster
+{ Severity: "Disaster" }
+
+Consulta para obtener las alertas de severidad disaster y en status resuelto
+{ Severity: "Disaster", Status: "RESOLVED" }
+
+#Consultas para realizar en el shell de MongoDB
+
+#Cantidad de alertas por severidad
+
+use Monitoreo
+db.Alertas.aggregate([
+  {
+    $group: {
+      _id: "$Severity",
+      count: { $sum: 1 }
+    }
+  },
+  {
+    $sort: { count: -1 }  // Opcional: ordena los resultados de mayor a menor
+  }
+])
+
+
+#Alertas por estado (Status) y gravedad (Severity)
+
+use Monitoreo
+db.Alertas.aggregate([
+  {
+    $group: {
+      _id: {
+        status: "$Status",
+        severity: "$Severity"
+      },
+      count: { $sum: 1 }
+    }
+  },
+  {
+    $sort: { "_id.severity": 1, count: -1 }
+  }
+])
+
+
+#Consulta para porcentaje de alertas por estado (Status)
+
+use Monitoreo
+db.Alertas.aggregate([
+  {
+    $group: {
+      _id: "$Status",
+      count: { $sum: 1 }
+    }
+  },
+  {
+    $group: {
+      _id: null,
+      total: { $sum: "$count" },
+      statuses: { $push: { status: "$_id", count: "$count" } }
+    }
+  },
+  {
+    $project: {
+      _id: 0,
+      results: {
+        $map: {
+          input: "$statuses",
+          as: "s",
+          in: {
+            status: "$$s.status",
+            count: "$$s.count",
+            percentage: {
+              $round: [
+                { $multiply: [{ $divide: ["$$s.count", "$total"] }, 100] },
+                2
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    $unwind: "$results"
+  },
+  {
+    $replaceRoot: { newRoot: "$results" }
+  },
+  {
+    $sort: { percentage: -1 }
+  }
+])
+
+
+#Top 5 hosts con más alertas
+
+use Monitoreo
+db.Alertas.aggregate([
+  {
+    $group: {
+      _id: "$Host",
+      totalAlertas: { $sum: 1 }
+    }
+  },
+  {
+    $sort: { totalAlertas: -1 }
+  },
+  {
+    $limit: 5
+  }
+])
